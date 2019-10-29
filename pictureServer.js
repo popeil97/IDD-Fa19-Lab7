@@ -18,7 +18,8 @@ Notes: You will need to specify what port you would like the webapp to be
 served from. You will also need to include the serial port address as a command
 line input.
 */
-
+const sgMail = require('@sendgrid/mail');
+sgMail.setApiKey(process.env.SENDGRID_API_KEY);
 var express = require('express'); // web server application
 var app = express(); // webapp
 var http = require('http').Server(app); // connects http library to server
@@ -27,12 +28,25 @@ var serverPort = 8000;
 var SerialPort = require('serialport'); // serial library
 var Readline = SerialPort.parsers.Readline; // read serial data as lines
 //-- Addition:
+const path = require("path");
+var base64Img = require('base64-img');
 var NodeWebcam = require( "node-webcam" );// load the webcam module
+const fs = require('fs');
+var node_mailer = require('nodemailer');
+var sgTransport = require('nodemailer-sendgrid-transport');
+
+var options = {
+    auth: {
+        api_user: '', // Sendgrid username
+        api_key: ''// Sendgrid password
+    }
+};
+
+var client = node_mailer.createTransport(sgTransport(options));
 
 //---------------------- WEBAPP SERVER SETUP ---------------------------------//
 // use express to create the simple webapp
 app.use(express.static('public')); // find pages in public directory
-
 // check to make sure that the user provides the serial port for the Arduino
 // when running the server
 if (!process.argv[2]) {
@@ -90,6 +104,45 @@ parser.on('data', function(data) {
   io.emit('server-msg', data);
 });
 //----------------------------------------------------------------------------//
+function takepic(imageName) {
+  return Promise.resolve(NodeWebcam.capture('public/'+imageName, opts, function( err, data ) {
+      io.emit('newPicture',(imageName+'.jpg')); ///Lastly, the new name is send to the client web browser.
+      /// The browser will take this new name and load the picture from the public folder.
+      console.log('data','public/'+imageName);
+
+  }))
+  .then(function() {
+
+    var bitmap = null;
+
+    while(bitmap != null) {
+      try {
+        console.log('Re');
+        bitmap = fs.readFileSync(path.resolve(__dirname, 'public/'+imageName + '.jpg'));
+      }
+      catch(e) {
+
+        continue;
+      }
+    }
+    console.log("REEEEEEEEE")
+    client.sendMail({
+        to: 'myEmail@gmail.com',
+        from: 'reeeee@gmail.com',
+        subject: 'Test Mail',
+        attachments: [
+        {
+          filename: 'MonOct282019171726GMT0700PacificDaylightTime.jpg',
+          path: path.resolve(__dirname,'public/' + imageName + '.jpg'),
+          content_id: 'car'
+        }],
+        html: 'Someone is at the door! Recognize them?<br><br><img src="cid:car">'
+      }).catch(function(err) {
+        console.log(err);
+      });
+});
+
+}
 
 
 //---------------------- WEBSOCKET COMMUNICATION (web browser)----------------//
@@ -110,6 +163,11 @@ io.on('connect', function(socket) {
     serial.write('L');
   });
 
+  socket.on('name',function() {
+    console.log('Name time');
+
+  });
+
   //-- Addition: This function is called when the client clicks on the `Take a picture` button.
   socket.on('takePicture', function() {
     /// First, we create a name for the new picture.
@@ -120,12 +178,11 @@ io.on('connect', function(socket) {
     console.log('making a making a picture at'+ imageName); // Second, the name is logged to the console.
 
     //Third, the picture is  taken and saved to the `public/`` folder
-    NodeWebcam.capture('public/'+imageName, opts, function( err, data ) {
-    io.emit('newPicture',(imageName+'.jpg')); ///Lastly, the new name is send to the client web browser.
-    /// The browser will take this new name and load the picture from the public folder.
-  });
+    takepic(imageName);
 
-  });
+
+});
+
   // if you get the 'disconnect' message, say the user disconnected
   socket.on('disconnect', function() {
     console.log('user disconnected');

@@ -19,6 +19,10 @@ function ledON() {
   socket.emit('ledON');
 }
 
+function submitName() {
+  socket.emit('name');
+}
+
 // send out ledOFF message over socket
 function ledOFF() {
   socket.emit('ledOFF');
@@ -37,6 +41,7 @@ socket.on('newPicture', function(msg) {
 // read the data from the message that the server sent and change the
 // background of the webpage based on the data in the message
 socket.on('server-msg', function(msg) {
+  socket.emit('takePicture');
   msg = msg.toString();
   console.log('msg:', msg);
   switch (msg) {
